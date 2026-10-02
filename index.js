@@ -5,8 +5,19 @@ const path = require("path");
 const os = require("os");
 const { execFile } = require("child_process");
 
+const net = require("net");
+
 // Suppress experimental sqlite warning
 process.removeAllListeners("warning");
+
+// Single-instance lock
+const singleInstanceServer = net.createServer();
+singleInstanceServer.once("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    process.exit(0);
+  }
+});
+singleInstanceServer.listen(47892, "127.0.0.1");
 
 let DatabaseSync = null;
 try {
