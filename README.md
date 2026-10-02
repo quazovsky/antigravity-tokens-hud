@@ -1,57 +1,52 @@
-# Antigravity Tokens HUD
+# Antigravity Tokens HUD (Carbon Edition)
 
 <p align="center">
-  <img src="assets/preview.png" alt="Antigravity Tokens HUD Preview" width="340" />
+  <img src="assets/preview.png" alt="Antigravity Tokens HUD Preview" width="300" />
 </p>
 
 <p align="center">
-  <b>Minimalistic real-time context & quota HUD for Google Antigravity 2.0.</b>
+  <b>High-contrast matte carbon HUD for Google Antigravity 2.0.</b>
   <br />
-  <a href="README.ru.md">🇷🇺 Читать на русском</a>
+  <a href="README.ru.md">🇷🇺 Русский</a> • <a href="README.md">🇬🇧 English</a>
 </p>
 
 ---
 
-## ⚡ Highlights
+## ✨ Features
 
-Cleanly embedded directly into the sidebar above the **Settings** button:
-
-- **Active Session Context:** token volume and fill percentage (fills left-to-right). Instantly tracks conversation switches.
-- **5-Hour Quota:** remaining allowance and countdown to reset.
-- **Weekly Quota:** weekly remaining percentage.
-- **RU / EN:** click anywhere on the widget to toggle language instantly.
+- **Matte Carbon UI**: Deep matte carbon fiber texture (`#0c0d10`), smooth progress bars, pure high-contrast white text, zero emojis.
+- **Dual Quota Display**: Simultaneous view of 5-hour and weekly limits with reset timers for both:
+  - **Gemini** (Flash, Pro)
+  - **Claude & GPT** (Opus, Sonnet, GPT)
+- **Collapse & Toggle Controls**:
+  - **Hide ▲ / Open ▼**: Instantly collapse the widget into a single slim row.
+  - **RU / EN**: 1-click language toggle.
+- **Auto-Refresh**: Live quota sync every 30 seconds prevents stale stats.
+- **Zero Lag**: In-memory SQLite parser running directly inside Node.js (instant ~4ms reads).
+- **Persistent Autostart**: Starts automatically with Antigravity and on Windows startup; single-instance lock prevents duplicate processes.
 
 ---
 
-## 🚀 One-Command Install
-
-All dependencies (Node.js and Python 3) are detected and installed **automatically**.
-
-### macOS / Linux
-```bash
-curl -fsSL https://raw.githubusercontent.com/myslithell/antigravity-tokens-hud/main/install.sh | bash
-```
+## 🚀 Quick Install
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/myslithell/antigravity-tokens-hud/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/quazovsky/antigravity-tokens-hud/main/install.ps1 | iex
 ```
 
-> **Done!** Open Antigravity 2.0 — the HUD is immediately active. The background service autostarts with your OS.
+### macOS / Linux
+```bash
+curl -fsSL https://raw.githubusercontent.com/quazovsky/antigravity-tokens-hud/main/install.sh | bash
+```
 
 ---
 
-## 🗑️ Uninstallation
+## 🗑️ Uninstall
 
-- **macOS / Linux:** `~/.antigravity-tokens-hud/uninstall.sh`
 - **Windows:** `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.antigravity-tokens-hud\uninstall.ps1"`
-
----
-
-## 📢 More interesting stuff here:
-👉 [https://t.me/+vmtcTYAm2UdhNTFi](https://t.me/+vmtcTYAm2UdhNTFi)
+- **macOS / Linux:** `~/.antigravity-tokens-hud/uninstall.sh`
 
 ---
 
 ## 📄 License
-MIT © [myslithell](https://github.com/myslithell)
+MIT © [quazovsky](https://github.com/quazovsky) / [myslithell](https://github.com/myslithell)

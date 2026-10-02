@@ -1,57 +1,52 @@
-# Antigravity Tokens HUD
+# Antigravity Tokens HUD (Carbon Edition)
 
 <p align="center">
-  <img src="assets/preview.png" alt="Antigravity Tokens HUD Preview" width="340" />
+  <img src="assets/preview.png" alt="Antigravity Tokens HUD Preview" width="300" />
 </p>
 
 <p align="center">
-  <b>Минималистичный виджет контекста и лимитов для Google Antigravity 2.0.</b>
+  <b>Минималистичный высококонтрастный карбоновый HUD контекста и квот для Google Antigravity 2.0.</b>
   <br />
-  <a href="README.md">🇬🇧 Read in English</a>
+  <a href="README.ru.md">🇷🇺 Русский</a> • <a href="README.md">🇬🇧 English</a>
 </p>
 
 ---
 
-## ⚡ Что показывает
+## ✨ Особенности
 
-Виджет аккуратно встраивается в боковую панель прямо над кнопкой **Settings**:
-
-- **Контекст чата:** процент и объём токенов активной сессии (наполняется слева направо). Мгновенно обновляется при смене чатов.
-- **5-часовой лимит:** остаток квоты и таймер до сброса.
-- **Недельный лимит:** общий недельный остаток квоты.
-- **RU / EN:** клик по виджету мгновенно переключает язык.
+- **Матовый карбоновый дизайн**: Тёмная карбоновая текстура (`#0c0d10`), плавные градиентные полосы и контрастный белый текст высокой читаемости без лишних смайликов.
+- **Все лимиты на одном экране**:
+  - **Gemini** (Flash, Pro) — 5-часовой и недельный лимит с обратным отсчетом.
+  - **Claude & GPT** (Opus, Sonnet, GPT) — 5-часовой и недельный лимит.
+- **Удобное управление**:
+  - **«Скрыть ▲» / «Открыть ▼»** — моментальное сворачивание виджета в одну аккуратную строку.
+  - **«RU / EN»** — быстрое переключение языка в 1 клик.
+- **Всегда актуальные данные**: Официальные квоты обновляются автоматически каждые 30 секунд.
+- **Мгновенная работа**: Встроенный SQLite-парсер прямо в Node.js без задержек.
+- **Умный автозапуск**: Бесшовный запуск вместе с Antigravity, автозагрузка Windows и защита от повторных копий (Single-Instance Lock).
 
 ---
 
-## 🚀 Установка в одну команду
-
-Все зависимости (Node.js и Python 3) проверяются и устанавливаются **автоматически**.
-
-### macOS / Linux
-```bash
-curl -fsSL https://raw.githubusercontent.com/myslithell/antigravity-tokens-hud/main/install-ru.sh | bash
-```
+## 🚀 Быстрая установка
 
 ### Windows (PowerShell)
 ```powershell
-irm https://raw.githubusercontent.com/myslithell/antigravity-tokens-hud/main/install-ru.ps1 | iex
+irm https://raw.githubusercontent.com/quazovsky/antigravity-tokens-hud/main/install-ru.ps1 | iex
 ```
 
-> **Готово!** Откройте Antigravity 2.0 — виджет уже работает над кнопкой Settings. Фоновая служба запускается автоматически вместе с системой.
+### macOS / Linux
+```bash
+curl -fsSL https://raw.githubusercontent.com/quazovsky/antigravity-tokens-hud/main/install-ru.sh | bash
+```
 
 ---
 
 ## 🗑️ Удаление
 
-- **macOS / Linux:** `~/.antigravity-tokens-hud/uninstall.sh`
 - **Windows:** `powershell -ExecutionPolicy Bypass -File "$env:USERPROFILE\.antigravity-tokens-hud\uninstall.ps1"`
-
----
-
-## 📢 Больше интересного тут:
-👉 [https://t.me/+vmtcTYAm2UdhNTFi](https://t.me/+vmtcTYAm2UdhNTFi)
+- **macOS / Linux:** `~/.antigravity-tokens-hud/uninstall.sh`
 
 ---
 
 ## 📄 Лицензия
-MIT © [myslithell](https://github.com/myslithell)
+MIT © [quazovsky](https://github.com/quazovsky) / [myslithell](https://github.com/myslithell)

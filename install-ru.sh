@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
-REPO_RAW_URL="https://raw.githubusercontent.com/myslithell/antigravity-tokens-hud/main"
+REPO_RAW_URL="https://raw.githubusercontent.com/quazovsky/antigravity-tokens-hud/main"
 INSTALL_DIR="$HOME/.antigravity-tokens-hud"
 
 echo "=========================================="

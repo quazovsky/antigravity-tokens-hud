@@ -2,7 +2,7 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 
-$RepoRawUrl = "https://raw.githubusercontent.com/myslithell/antigravity-tokens-hud/main"
+$RepoRawUrl = "https://raw.githubusercontent.com/quazovsky/antigravity-tokens-hud/main"
 $InstallDir = "$env:USERPROFILE\.antigravity-tokens-hud"
 
 Write-Host "==========================================" -ForegroundColor Cyan
