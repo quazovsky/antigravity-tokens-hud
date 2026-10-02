@@ -1,7 +1,7 @@
 # Antigravity Tokens HUD (Carbon Edition)
 
 <p align="center">
-  <img src="assets/preview.png" alt="Antigravity Tokens HUD Preview" width="300" />
+  <img src="assets/preview-carbon.png" alt="Antigravity Tokens HUD Preview" width="300" />
 </p>
 
 <p align="center">
