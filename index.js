@@ -5,6 +5,14 @@ const path = require("path");
 const os = require("os");
 const { execFile } = require("child_process");
 
+// Suppress experimental sqlite warning
+process.removeAllListeners("warning");
+
+let DatabaseSync = null;
+try {
+  DatabaseSync = require("node:sqlite").DatabaseSync;
+} catch (_) {}
+
 function getDevToolsFilePath() {
   const home = os.homedir();
   if (process.platform === "darwin") {
@@ -19,6 +27,7 @@ function getDevToolsFilePath() {
 }
 
 const DEVTOOLS_FILE = getDevToolsFilePath();
+const CONVERSATIONS_DIR = path.join(os.homedir(), ".gemini/antigravity/conversations");
 const TOKEN_STATS_SCRIPT = path.join(__dirname, "token_stats.py");
 const CLIENT_SCRIPT_PATH = fs.existsSync(path.join(__dirname, "client_widget.js"))
   ? path.join(__dirname, "client_widget.js")
@@ -29,6 +38,263 @@ let cdpMessageId = 1;
 function nextCdpId() {
   cdpMessageId = (cdpMessageId + 1) & 0x7fffffff;
   return cdpMessageId;
+}
+
+// Protobuf decode helpers for SQLite data
+function decodeVarint(buf, offset) {
+  let res = 0;
+  let shift = 0;
+  while (true) {
+    if (offset >= buf.length) break;
+    const b = buf[offset++];
+    res |= (b & 0x7f) << shift;
+    if (!(b & 0x80)) break;
+    shift += 7;
+  }
+  return [res, offset];
+}
+
+function parseProto(buf, offset = 0, end = null) {
+  if (end === null) end = buf.length;
+  const fields = [];
+  while (offset < end) {
+    const [tag, newOffset] = decodeVarint(buf, offset);
+    offset = newOffset;
+    const fieldNum = tag >> 3;
+    const wireType = tag & 7;
+    if (wireType === 0) {
+      const [val, nextOffset] = decodeVarint(buf, offset);
+      offset = nextOffset;
+      fields.push({ fieldNum, type: "varint", val });
+    } else if (wireType === 2) {
+      const [length, nextOffset] = decodeVarint(buf, offset);
+      offset = nextOffset;
+      const val = buf.subarray(offset, offset + length);
+      offset += length;
+      fields.push({ fieldNum, type: "bytes", val });
+    } else if (wireType === 1) {
+      offset += 8;
+    } else if (wireType === 5) {
+      offset += 4;
+    } else {
+      break;
+    }
+  }
+  return fields;
+}
+
+// Fast in-memory cache for parsed conversation databases
+const dbCache = new Map();
+
+function collectMetricsNode(currentConvId = null) {
+  if (!DatabaseSync || !fs.existsSync(CONVERSATIONS_DIR)) return null;
+
+  const nowTs = Math.floor(Date.now() / 1000);
+  let dbFiles = fs.readdirSync(CONVERSATIONS_DIR)
+    .filter(f => f.endsWith(".db"))
+    .map(f => {
+      const fullPath = path.join(CONVERSATIONS_DIR, f);
+      try {
+        const stat = fs.statSync(fullPath);
+        return { path: fullPath, name: f, mtime: stat.mtimeMs };
+      } catch (_) {
+        return null;
+      }
+    })
+    .filter(Boolean);
+
+  dbFiles.sort((a, b) => b.mtime - a.mtime);
+  if (!currentConvId && dbFiles.length > 0) {
+    currentConvId = dbFiles[0].name.replace(".db", "");
+  }
+
+  const cutoffTs = nowTs - (8 * 86400);
+  const allRecords = [];
+  let latestTs = 0;
+
+  for (const { path: dbPath, name, mtime } of dbFiles) {
+    const sessId = name.replace(".db", "");
+    if (sessId !== currentConvId && (mtime / 1000) < cutoffTs) {
+      continue;
+    }
+
+    const cached = dbCache.get(dbPath);
+    if (cached && cached.mtime === mtime) {
+      for (const r of cached.records) {
+        if (r.timestamp > latestTs) latestTs = r.timestamp;
+        allRecords.push(r);
+      }
+      continue;
+    }
+
+    const recordsForDb = [];
+    try {
+      const db = new DatabaseSync(dbPath, { readOnly: true });
+      const stepTimes = new Map();
+      try {
+        const stepRows = db.prepare("SELECT idx, metadata FROM steps WHERE metadata IS NOT NULL").all();
+        for (const row of stepRows) {
+          if (!row.metadata) continue;
+          const proto = parseProto(row.metadata);
+          for (const f of proto) {
+            if (f.fieldNum === 1 && f.type === "bytes") {
+              const sub = parseProto(f.val);
+              for (const sf of sub) {
+                if (sf.fieldNum === 1 && sf.type === "varint") {
+                  stepTimes.set(row.idx, sf.val);
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      try {
+        const metaRows = db.prepare("SELECT idx, data FROM gen_metadata ORDER BY idx ASC").all();
+        for (const row of metaRows) {
+          if (!row.data) continue;
+          const ts = stepTimes.get(row.idx) || 0;
+          if (ts > latestTs) latestTs = ts;
+          const proto = parseProto(row.data);
+          for (const f of proto) {
+            if (f.fieldNum === 1 && f.type === "bytes") {
+              const sub = parseProto(f.val);
+              for (const sf of sub) {
+                if (sf.fieldNum === 17 && sf.type === "bytes") {
+                  const tsub = parseProto(sf.val);
+                  for (const tf of tsub) {
+                    if (tf.type === "bytes") {
+                      const dsub = parseProto(tf.val);
+                      const d = {};
+                      for (const df of dsub) {
+                        if (df.type === "varint") d[df.fieldNum] = df.val;
+                      }
+                      if (d && ((d[2] || 0) > 0 || (d[5] || 0) > 0 || (d[3] || 0) > 0)) {
+                        const promptTokens = d[2] || 0;
+                        const outputTokens = d[3] || 0;
+                        const cachedTokens = d[5] || 0;
+                        const thinkingTokens = d[9] || 0;
+                        const textTokens = d[10] || 0;
+                        const rec = {
+                          session_id: sessId,
+                          idx: row.idx,
+                          timestamp: ts,
+                          prompt_tokens: promptTokens,
+                          output_tokens: outputTokens,
+                          cached_tokens: cachedTokens,
+                          thinking_tokens: thinkingTokens,
+                          text_tokens: textTokens,
+                          context_size: cachedTokens + promptTokens
+                        };
+                        recordsForDb.push(rec);
+                        allRecords.push(rec);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (_) {}
+      db.close();
+      dbCache.set(dbPath, { mtime, records: recordsForDb });
+    } catch (_) {}
+  }
+
+  const refTs = latestTs > 0 ? latestTs : nowTs;
+  const h5Ts = refTs - (5 * 3600);
+  const w1Ts = refTs - (7 * 86400);
+
+  const h5Records = allRecords.filter(r => r.timestamp >= h5Ts);
+  const w1Records = allRecords.filter(r => r.timestamp >= w1Ts);
+
+  const maxContext = 1000000;
+  const sessionsMap = {};
+  for (const r of allRecords) {
+    const sid = r.session_id;
+    const ctx = r.context_size;
+    sessionsMap[sid] = {
+      session_id: sid,
+      context_size: ctx,
+      max_context: maxContext,
+      context_percent: Number(((ctx / maxContext) * 100).toFixed(2)),
+      cached_tokens: r.cached_tokens,
+      prompt_tokens: r.prompt_tokens,
+      output_tokens: r.output_tokens,
+      thinking_tokens: r.thinking_tokens,
+      text_tokens: r.text_tokens
+    };
+  }
+
+  const currentSession = sessionsMap[currentConvId] || null;
+  const currentContext = currentSession ? currentSession.context_size : 0;
+  const currentCached = currentSession ? currentSession.cached_tokens : 0;
+  const currentPrompt = currentSession ? currentSession.prompt_tokens : 0;
+  const currentOutput = currentSession ? currentSession.output_tokens : 0;
+  const currentThinking = currentSession ? currentSession.thinking_tokens : 0;
+  const currentText = currentSession ? currentSession.text_tokens : 0;
+
+  return {
+    current_session: {
+      session_id: currentConvId,
+      context_size: currentContext,
+      max_context: maxContext,
+      context_percent: Number(((currentContext / maxContext) * 100).toFixed(2)),
+      cached_tokens: currentCached,
+      prompt_tokens: currentPrompt,
+      output_tokens: currentOutput,
+      thinking_tokens: currentThinking,
+      text_tokens: currentText
+    },
+    sessions: sessionsMap,
+    usage_5h: {
+      window_hours: 5,
+      total_requests: h5Records.length,
+      input_tokens: h5Records.reduce((s, r) => s + r.prompt_tokens, 0),
+      output_tokens: h5Records.reduce((s, r) => s + r.output_tokens, 0),
+      thinking_tokens: h5Records.reduce((s, r) => s + r.thinking_tokens, 0),
+      total_tokens: h5Records.reduce((s, r) => s + r.prompt_tokens + r.output_tokens, 0)
+    },
+    usage_weekly: {
+      window_days: 7,
+      total_requests: w1Records.length,
+      input_tokens: w1Records.reduce((s, r) => s + r.prompt_tokens, 0),
+      output_tokens: w1Records.reduce((s, r) => s + r.output_tokens, 0),
+      thinking_tokens: w1Records.reduce((s, r) => s + r.thinking_tokens, 0),
+      total_tokens: w1Records.reduce((s, r) => s + r.prompt_tokens + r.output_tokens, 0)
+    },
+    updated_at: new Date().toISOString()
+  };
+}
+
+function fetchTokenStatsPython() {
+  return new Promise((resolve) => {
+    const pythonBin = process.platform === "win32" ? "python" : "python3";
+    const env = { ...process.env };
+    if (process.platform !== "win32") {
+      env.PATH = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", process.env.PATH || ""].join(":");
+    }
+    execFile(pythonBin, [TOKEN_STATS_SCRIPT, "--json"], { timeout: 8000, env }, (err, stdout) => {
+      if (err || !stdout) {
+        resolve(null);
+        return;
+      }
+      try {
+        resolve(JSON.parse(stdout));
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  });
+}
+
+async function fetchTokenStats() {
+  try {
+    const nodeMetrics = collectMetricsNode();
+    if (nodeMetrics) return nodeMetrics;
+  } catch (_) {}
+  return await fetchTokenStatsPython();
 }
 
 // Map of pageId -> { ws, injected: boolean, url: string }
@@ -43,7 +309,7 @@ function getConfigLang() {
       if (cfg && cfg.lang) return cfg.lang;
     }
   } catch (_) {}
-  return "en";
+  return "ru";
 }
 
 function getDevToolsInfo() {
@@ -65,27 +331,6 @@ async function listAntigravityPages(port) {
   } catch (_) {
     return [];
   }
-}
-
-function fetchTokenStats() {
-  return new Promise((resolve) => {
-    const pythonBin = process.platform === "win32" ? "python" : "python3";
-    const env = { ...process.env };
-    if (process.platform !== "win32") {
-      env.PATH = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", process.env.PATH || ""].join(":");
-    }
-    execFile(pythonBin, [TOKEN_STATS_SCRIPT, "--json"], { timeout: 10000, env }, (err, stdout) => {
-      if (err || !stdout) {
-        resolve(null);
-        return;
-      }
-      try {
-        resolve(JSON.parse(stdout));
-      } catch (_) {
-        resolve(null);
-      }
-    });
-  });
 }
 
 function connectPageWebSocket(page) {
@@ -210,25 +455,12 @@ async function updateLoop() {
     for (const [id, entry] of activePages) {
       if (entry.ws.readyState !== WebSocket.OPEN) continue;
 
-      let evalCode = "";
-      if (!entry.injected) {
-        evalCode = `
-          window.__AGY_DATA__ = ${payload};
-          window.__AGY_LANG__ = ${JSON.stringify(lang)};
-          ${clientScript}
-        `;
-        entry.injected = true;
-      } else {
-        evalCode = `
-          window.__AGY_DATA__ = ${payload};
-          window.__AGY_LANG__ = ${JSON.stringify(lang)};
-          if (window.__AGY_RENDER__) {
-            window.__AGY_RENDER__();
-          } else {
-            ${clientScript}
-          }
-        `;
-      }
+      let evalCode = `
+        window.__AGY_DATA__ = ${payload};
+        window.__AGY_LANG__ = ${JSON.stringify(lang)};
+        ${clientScript}
+      `;
+      entry.injected = true;
 
       entry.ws.send(JSON.stringify({
         id: nextCdpId(),
@@ -246,6 +478,15 @@ async function updateLoop() {
   }
 }
 
-console.log("[Antigravity Tokens HUD] Daemon running. Monitoring Antigravity DevTools...");
-setInterval(updateLoop, 1000);
+// Watch conversations directory for real-time reactivity
+if (fs.existsSync(CONVERSATIONS_DIR)) {
+  try {
+    fs.watch(CONVERSATIONS_DIR, () => {
+      updateLoop();
+    });
+  } catch (_) {}
+}
+
+console.log("[Antigravity Tokens HUD] High-speed daemon running. Monitoring Antigravity DevTools...");
+setInterval(updateLoop, 500);
 updateLoop();

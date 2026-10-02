@@ -1,7 +1,6 @@
 (() => {
   function getActiveConvId() {
     try {
-      // 1. TanStack Router state (official router of Antigravity 2.0)
       if (window.__TSR_ROUTER__?.state) {
         const matches = window.__TSR_ROUTER__.state.matches || [];
         for (let i = matches.length - 1; i >= 0; i--) {
@@ -16,28 +15,24 @@
         }
       }
 
-      // 2. Main chat view container in DOM
       const mainChat = document.querySelector("div:not([data-testid=\"conversation-row-sidebar\"])[data-cascade-id]");
       if (mainChat) {
         const id = mainChat.getAttribute("data-cascade-id");
         if (id) return id;
       }
 
-      // 3. Currently selected row in sidebar
       const selRow = document.querySelector("[data-selected=\"true\"][data-cascade-id]") || document.querySelector("[data-selected=\"true\"]");
       if (selRow) {
         const id = selRow.getAttribute("data-cascade-id");
         if (id) return id;
       }
 
-      // 4. Check window.location.pathname (/c/<id>)
       const parts = window.location.pathname.split("/");
       const idx = parts.indexOf("c");
       if (idx !== -1 && parts[idx + 1]) {
         return parts[idx + 1];
       }
 
-      // 5. Any element with data-cascade-id inside main/chat area
       const anyChat = document.querySelector("[data-cascade-id]");
       if (anyChat) {
         const id = anyChat.getAttribute("data-cascade-id");
@@ -50,15 +45,18 @@
   function getActiveModelName() {
     try {
       const btns = Array.from(document.querySelectorAll("button"));
-      const modelBtn = btns.find(b => b.textContent && (b.textContent.includes("Gemini") || b.textContent.includes("Claude") || b.textContent.includes("GPT")));
+      const modelBtn = btns.find(b => {
+        const t = (b.textContent || "").trim();
+        return t.includes("Gemini") || t.includes("Claude") || t.includes("GPT") || t.includes("OpenAI");
+      });
       if (modelBtn) {
-        const txt = modelBtn.innerText.replace(/\s+/g, " ").trim();
-        const m = txt.match(/(Gemini\s+[\d.]+\s+\w+|Claude\s+[\w\s.]+|GPT-[\w\s.]+)/i);
-        if (m) return m[1].toLowerCase().replace(/\s+/g, "-");
-        return txt.split(" ")[0].toLowerCase();
+        let txt = modelBtn.innerText.replace(/\s+/g, " ").trim();
+        txt = txt.replace(/^[^\w\dа-яА-ЯёЁ]+/, "");
+        txt = txt.replace(/^(model|switch model):\s*/i, "");
+        return txt;
       }
     } catch (_) {}
-    return "gemini-3.8-flash";
+    return "Gemini 3.8 Flash";
   }
 
   function fmtK(n) {
@@ -70,7 +68,7 @@
 
   function formatResetTime(seconds, isRu) {
     if (!seconds) return "";
-    const sec = parseInt(seconds, 10);
+    const sec = typeof seconds === "string" ? parseInt(seconds, 10) : Number(seconds);
     if (isNaN(sec)) return "";
     const diff = sec - Math.floor(Date.now() / 1000);
     if (diff <= 0) return isRu ? "сейчас" : "now";
@@ -80,6 +78,18 @@
     if (days > 0) return isRu ? `${days}д ${hours}ч` : `${days}d ${hours}h`;
     if (hours > 0) return isRu ? `${hours}ч ${mins}м` : `${hours}h ${mins}m`;
     return isRu ? `${mins}м` : `${mins}m`;
+  }
+
+  function getBarGradient(pct) {
+    if (pct >= 50) return "linear-gradient(90deg, #10b981, #34d399)";
+    if (pct >= 20) return "linear-gradient(90deg, #f59e0b, #fbbf24)";
+    return "linear-gradient(90deg, #ef4444, #f87171)";
+  }
+
+  function getTextColor(pct) {
+    if (pct >= 50) return "#34d399";
+    if (pct >= 20) return "#fbbf24";
+    return "#f87171";
   }
 
   async function fetchOfficialQuotas() {
@@ -100,7 +110,7 @@
       if (!client) return null;
       const res = await Promise.race([
         client.retrieveUserQuotaSummary({}),
-        new Promise(r => setTimeout(() => r(null), 2000))
+        new Promise(r => setTimeout(() => r(null), 1500))
       ]);
       return res?.response?.groups || null;
     } catch (e) {
@@ -110,16 +120,84 @@
 
   let cachedQuotas = null;
   let lastQuotaFetch = 0;
+  let isFetchingQuotas = false;
 
-  async function getQuotas() {
+  async function getQuotas(force = false) {
     const now = Date.now();
-    if (!cachedQuotas || now - lastQuotaFetch > 4000) {
+    // 30 seconds refresh cycle
+    if (force || !cachedQuotas || (now - lastQuotaFetch >= 30000 && !isFetchingQuotas)) {
+      isFetchingQuotas = true;
       lastQuotaFetch = now;
-      const q = await fetchOfficialQuotas();
-      if (q) cachedQuotas = q;
+      try {
+        const q = await fetchOfficialQuotas();
+        if (q && q.length > 0) cachedQuotas = q;
+      } finally {
+        isFetchingQuotas = false;
+      }
     }
     return cachedQuotas;
   }
+
+  function parseQuotaGroups(groups, isRu) {
+    if (!groups || !groups.length) return [];
+    return groups.map(g => {
+      const dName = g.displayName || "";
+      const isGemini = dName.toLowerCase().includes("gemini");
+      const isClaudeGpt = dName.toLowerCase().includes("claude") || dName.toLowerCase().includes("gpt");
+
+      let shortName = dName;
+      if (isGemini) shortName = "Gemini";
+      else if (isClaudeGpt) shortName = "Claude & GPT";
+
+      const hBucket = g.buckets?.find(b => b.window === "5h" || b.bucketId?.includes("5h"));
+      const wBucket = g.buckets?.find(b => b.window === "weekly" || b.bucketId?.includes("weekly"));
+
+      const hVal = hBucket?.remaining?.value != null ? hBucket.remaining.value : 1.0;
+      const wVal = wBucket?.remaining?.value != null ? wBucket.remaining.value : 1.0;
+
+      const hPct = Math.round(hVal * 100);
+      const wPct = Math.round(wVal * 100);
+
+      const hResetSec = hBucket?.resetTime?.seconds;
+      const wResetSec = wBucket?.resetTime?.seconds;
+
+      const hResetStr = formatResetTime(hResetSec, isRu);
+      const wResetStr = formatResetTime(wResetSec, isRu);
+
+      let modelsDesc = (g.description || "").replace(/^Models within this group:\s*/i, "");
+      modelsDesc = modelsDesc
+        .replace("Gemini Flash, Gemini Pro", "Flash, Pro")
+        .replace("Claude Opus, Claude Sonnet, GPT-OSS", "Opus, Sonnet, GPT");
+
+      return {
+        id: isGemini ? "gemini" : (isClaudeGpt ? "claude-gpt" : dName.toLowerCase().replace(/\s+/g, "-")),
+        displayName: dName,
+        shortName,
+        isGemini,
+        modelsDesc,
+        fiveHour: {
+          pct: hPct,
+          resetStr: hResetStr,
+          resetSec: hResetSec
+        },
+        weekly: {
+          pct: wPct,
+          resetStr: wResetStr,
+          resetSec: wResetSec
+        }
+      };
+    });
+  }
+
+  // Matte Carbon styling
+  const CARBON_BG = [
+    "background-color: #0c0d10",
+    "background-image: linear-gradient(45deg, #16181e 25%, transparent 25%), linear-gradient(-45deg, #16181e 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #16181e 75%), linear-gradient(-45deg, transparent 75%, #16181e 75%)",
+    "background-size: 6px 6px",
+    "background-position: 0 0, 0 3px, 3px -3px, -3px 0px",
+    "border: 1px solid rgba(255, 255, 255, 0.16)",
+    "box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 20px rgba(0, 0, 0, 0.65)"
+  ].join("; ");
 
   window.__AGY_RENDER__ = async function() {
     const data = window.__AGY_DATA__;
@@ -131,57 +209,53 @@
     );
     if (!settingsBtn) return;
 
-    // Language resolution: localStorage > window.__AGY_LANG__ > default 'en'
-    let currentLang = "en";
+    // Language resolution
+    let currentLang = "ru";
     try {
-      currentLang = localStorage.getItem("agy_hud_lang") || window.__AGY_LANG__ || "en";
+      currentLang = localStorage.getItem("agy_hud_lang") || window.__AGY_LANG__ || "ru";
     } catch (_) {
-      currentLang = window.__AGY_LANG__ || "en";
+      currentLang = window.__AGY_LANG__ || "ru";
     }
     const isRu = currentLang === "ru";
+
+    // Collapsed resolution
+    let isCollapsed = false;
+    try {
+      isCollapsed = localStorage.getItem("agy_hud_collapsed") === "true";
+    } catch (_) {}
+
+    const containerStyles = [
+      isCollapsed ? "padding: 8px 11px" : "padding: 10px 12px",
+      "margin: 6px 8px 10px 8px",
+      "border-radius: 10px",
+      CARBON_BG,
+      "font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      "color: #ffffff",
+      "user-select: none",
+      "cursor: default",
+      "transition: border-color 0.2s ease, box-shadow 0.2s ease, padding 0.2s ease"
+    ].join("; ");
 
     if (!container) {
       container = document.createElement("div");
       container.id = "antigravity-token-widget";
-      container.style.cssText = [
-        "padding: 8px 10px",
-        "margin: 4px 8px 8px 8px",
-        "border-radius: 8px",
-        "background: rgba(255, 255, 255, 0.035)",
-        "border: 1px solid rgba(255, 255, 255, 0.07)",
-        "font-family: ui-monospace, SFMono-Regular, Menlo, monospace",
-        "font-size: 11px",
-        "line-height: 1.3",
-        "color: rgba(255, 255, 255, 0.85)",
-        "user-select: none",
-        "cursor: pointer",
-        "transition: border-color 0.2s ease, background 0.2s ease"
-      ].join("; ");
-
-      container.onmouseenter = () => {
-        container.style.borderColor = "rgba(255, 255, 255, 0.15)";
-        container.style.background = "rgba(255, 255, 255, 0.05)";
-      };
-      container.onmouseleave = () => {
-        container.style.borderColor = "rgba(255, 255, 255, 0.07)";
-        container.style.background = "rgba(255, 255, 255, 0.035)";
-      };
-
+      container.style.cssText = containerStyles;
       settingsBtn.parentElement.insertBefore(container, settingsBtn);
+    } else {
+      container.onclick = null;
+      container.style.cssText = containerStyles;
     }
 
-    container.style.cursor = "pointer";
-    container.onclick = (e) => {
-      e.stopPropagation();
-      const current = localStorage.getItem("agy_hud_lang") || window.__AGY_LANG__ || "en";
-      const nextLang = current === "ru" ? "en" : "ru";
-      try {
-        localStorage.setItem("agy_hud_lang", nextLang);
-      } catch (_) {}
-      if (window.__AGY_RENDER__) window.__AGY_RENDER__();
+    container.onmouseenter = () => {
+      container.style.borderColor = "rgba(255, 255, 255, 0.32)";
+      container.style.boxShadow = "inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 8px 24px rgba(0, 0, 0, 0.75)";
+    };
+    container.onmouseleave = () => {
+      container.style.borderColor = "rgba(255, 255, 255, 0.16)";
+      container.style.boxShadow = "inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 6px 20px rgba(0, 0, 0, 0.65)";
     };
 
-    // 1. Session Context from SQLite
+    // 1. Session Context
     const activeId = getActiveConvId();
     let session = null;
     if (data.sessions && activeId && data.sessions[activeId]) {
@@ -205,74 +279,143 @@
     const maxK = ((session.max_context || 1000000) >= 1000000) ? "1M" : fmtK(session.max_context);
     const modelName = getActiveModelName();
 
-    // 2. Official Quota Summary from Antigravity Backend
-    const quotaGroups = await getQuotas();
-    let fiveHourPct = 100;
-    let fiveHourReset = "";
-    let weeklyPct = 100;
-    let weeklyReset = "";
+    // 2. Render COLLAPSED state
+    if (isCollapsed) {
+      container.innerHTML = `
+        <div id="agy-expand-row" title="${isRu ? "Нажмите, чтобы открыть HUD" : "Click to open HUD"}" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+          <div style="display: flex; align-items: center; gap: 7px; overflow: hidden;">
+            <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; flex-shrink: 0;"></span>
+            <span style="font-weight: 700; color: #ffffff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px;">${modelName}</span>
+            <span style="font-size: 11.5px; color: #34d399; font-weight: 700;">${pct.toFixed(1)}%</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+            <button type="button" id="agy-btn-expand" style="background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.26); color: #ffffff; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 3px; line-height: 1.1;">
+              <span>${isRu ? "Открыть" : "Open"}</span>
+              <span style="font-size: 8px;">▼</span>
+            </button>
+          </div>
+        </div>
+      `;
 
-    if (quotaGroups && quotaGroups.length > 0) {
-      const geminiGroup = quotaGroups.find(g => g.displayName?.includes("Gemini")) || quotaGroups[0];
-      const hBucket = geminiGroup?.buckets?.find(b => b.window === "5h" || b.bucketId?.includes("5h"));
-      const wBucket = geminiGroup?.buckets?.find(b => b.window === "weekly" || b.bucketId?.includes("weekly"));
-
-      if (hBucket?.remaining?.value != null) {
-        fiveHourPct = Math.round(hBucket.remaining.value * 100);
-        fiveHourReset = formatResetTime(hBucket.resetTime?.seconds, isRu);
+      const expandTrigger = container.querySelector("#agy-expand-row");
+      if (expandTrigger) {
+        expandTrigger.onclick = (e) => {
+          e.stopPropagation();
+          try { localStorage.setItem("agy_hud_collapsed", "false"); } catch (_) {}
+          getQuotas(true);
+          window.__AGY_RENDER__();
+        };
       }
-      if (wBucket?.remaining?.value != null) {
-        weeklyPct = Math.round(wBucket.remaining.value * 100);
-        weeklyReset = formatResetTime(wBucket.resetTime?.seconds, isRu);
-      }
+      return;
     }
+
+    // 3. Render EXPANDED state (Both Gemini AND Claude/GPT always visible!)
+    const rawGroups = await getQuotas();
+    const groups = parseQuotaGroups(rawGroups, isRu);
 
     const title5h = isRu ? "5-часовой" : "5-Hour";
     const titleWeekly = isRu ? "Недельный" : "Weekly";
-    const tip5h = isRu
-      ? `Остаток 5-часового лимита: ${fiveHourPct}%${fiveHourReset ? ` (сброс через ${fiveHourReset})` : ""}`
-      : `5-Hour limit remaining: ${fiveHourPct}%${fiveHourReset ? ` (reset in ${fiveHourReset})` : ""}`;
-    const tipWeekly = isRu
-      ? `Остаток недельного лимита: ${weeklyPct}%${weeklyReset ? ` (сброс через ${weeklyReset})` : ""}`
-      : `Weekly limit remaining: ${weeklyPct}%${weeklyReset ? ` (reset in ${weeklyReset})` : ""}`;
-    const switchHint = isRu ? "Нажмите для переключения на English" : "Click to switch to Russian";
+    const hideBtnLabel = isRu ? "Скрыть" : "Hide";
 
-    container.title = `${tip5h}\n${tipWeekly}\n(${switchHint})`;
+    let groupsHtml = "";
+    if (!groups || groups.length === 0) {
+      groupsHtml = `
+        <div style="font-size: 12px; font-weight: 600; color: #ffffff; padding: 10px 0; text-align: center;">
+          ${isRu ? "Загрузка данных квот..." : "Loading quota data..."}
+        </div>
+      `;
+    } else {
+      groupsHtml = groups.map((g, idx) => {
+        const hGrad = getBarGradient(g.fiveHour.pct);
+        const wGrad = getBarGradient(g.weekly.pct);
+        const hTextColor = getTextColor(g.fiveHour.pct);
+        const wTextColor = getTextColor(g.weekly.pct);
+
+        const borderTop = (idx > 0) ? "border-top: 1px solid rgba(255,255,255,0.12); padding-top: 8px; margin-top: 8px;" : "margin-top: 6px;";
+        const descHtml = g.modelsDesc ? `<span style="font-size: 10.5px; color: #cbd5e1; font-weight: 500; margin-left: 5px;">(${g.modelsDesc})</span>` : "";
+
+        return `
+          <div style="${borderTop}">
+            <!-- Group Header -->
+            <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px;">
+              <span style="font-size: 12.5px; font-weight: 700; color: #ffffff;">${g.shortName}${descHtml}</span>
+            </div>
+
+            <!-- 5-Hour Row -->
+            <div style="margin-bottom: 6px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                <span style="font-size: 11.5px; font-weight: 600; color: #ffffff;">${title5h}</span>
+                <span style="font-size: 12px; font-weight: 700; color: ${hTextColor};">
+                  ${g.fiveHour.pct}% ${g.fiveHour.resetStr ? `<span style="font-weight: 600; color: #cbd5e1; font-size: 11px; margin-left: 3px;">(${g.fiveHour.resetStr})</span>` : ""}
+                </span>
+              </div>
+              <div style="background: rgba(255,255,255,0.14); height: 6px; border-radius: 3px; overflow: hidden;">
+                <div style="background: ${hGrad}; width: ${g.fiveHour.pct}%; height: 100%; border-radius: 3px; transition: width 0.3s ease;"></div>
+              </div>
+            </div>
+
+            <!-- Weekly Row -->
+            <div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                <span style="font-size: 11.5px; font-weight: 600; color: #ffffff;">${titleWeekly}</span>
+                <span style="font-size: 12px; font-weight: 700; color: ${wTextColor};">
+                  ${g.weekly.pct}% ${g.weekly.resetStr ? `<span style="font-weight: 600; color: #cbd5e1; font-size: 11px; margin-left: 3px;">(${g.weekly.resetStr})</span>` : ""}
+                </span>
+              </div>
+              <div style="background: rgba(255,255,255,0.14); height: 6px; border-radius: 3px; overflow: hidden;">
+                <div style="background: ${wGrad}; width: ${g.weekly.pct}%; height: 100%; border-radius: 3px; transition: width 0.3s ease;"></div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
 
     container.innerHTML = `
-      <!-- 1. Model & Context (Наполняется слева направо) -->
-      <div style="margin-bottom: 6px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
-          <span style="font-weight: 600; color: #f1f5f9; font-size: 10.5px;">${modelName}</span>
-          <span style="font-size: 10px; color: #10b981; font-weight: 600;">${pct.toFixed(1)}% <span style="font-weight: 400; color: #94a3b8;">(${ctxK}/${maxK})</span></span>
+      <!-- 1. Header: Model name + Language toggle + Collapse button -->
+      <div style="margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+          <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
+            <span style="font-weight: 700; color: #ffffff; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px;">${modelName}</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 5px;">
+            <span style="font-size: 12px; color: #34d399; font-weight: 700;">${pct.toFixed(1)}% <span style="font-weight: 600; color: #e2e8f0; font-size: 11px;">(${ctxK}/${maxK})</span></span>
+            <button type="button" id="agy-lang-toggle" title="${isRu ? "Переключить язык (RU/EN)" : "Switch language (RU/EN)"}" style="background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.26); color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; cursor: pointer; line-height: 1.1;">${isRu ? "RU" : "EN"}</button>
+            <button type="button" id="agy-btn-collapse" title="${isRu ? "Скрыть полностью" : "Hide completely"}" style="background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.26); color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 3px; line-height: 1.1;">
+              <span>${hideBtnLabel}</span>
+              <span style="font-size: 8px;">▲</span>
+            </button>
+          </div>
         </div>
-        <div style="background: rgba(255,255,255,0.08); height: 4px; border-radius: 2px; overflow: hidden;">
-          <div style="background: #10b981; width: ${barWidth}%; height: 100%; transition: width 0.3s ease;"></div>
-        </div>
-      </div>
-
-      <!-- 2. 5-Hour Limit Remaining (Уменьшается справа налево) -->
-      <div style="margin-bottom: 6px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
-          <span style="font-weight: 500; color: #94a3b8; font-size: 10px;">${title5h}</span>
-          <span style="font-size: 9.5px; color: #94a3b8; font-weight: 500;">${fiveHourPct}% ${fiveHourReset ? `<span style="font-weight: 400; color: #64748b;">(${fiveHourReset})</span>` : ""}</span>
-        </div>
-        <div style="background: rgba(255,255,255,0.06); height: 3.5px; border-radius: 2px; overflow: hidden;">
-          <div style="background: #64748b; width: ${fiveHourPct}%; height: 100%; transition: width 0.3s ease;"></div>
+        <div style="background: rgba(255,255,255,0.14); height: 6px; border-radius: 3px; overflow: hidden;">
+          <div style="background: linear-gradient(90deg, #10b981, #34d399); width: ${barWidth}%; height: 100%; border-radius: 3px; transition: width 0.3s ease;"></div>
         </div>
       </div>
 
-      <!-- 3. Weekly Limit Remaining (Уменьшается справа налево) -->
-      <div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
-          <span style="font-weight: 500; color: #94a3b8; font-size: 10px;">${titleWeekly}</span>
-          <span style="font-size: 9.5px; color: #94a3b8; font-weight: 500;">${weeklyPct}% ${weeklyReset ? `<span style="font-weight: 400; color: #64748b;">(${weeklyReset})</span>` : ""}</span>
-        </div>
-        <div style="background: rgba(255,255,255,0.06); height: 3.5px; border-radius: 2px; overflow: hidden;">
-          <div style="background: #64748b; width: ${weeklyPct}%; height: 100%; transition: width 0.3s ease;"></div>
-        </div>
-      </div>
+      <!-- 2. Quota Groups (Gemini + Claude & GPT both displayed clearly) -->
+      ${groupsHtml}
     `;
+
+    // Event listeners
+    const langBtn = container.querySelector("#agy-lang-toggle");
+    if (langBtn) {
+      langBtn.onclick = (e) => {
+        e.stopPropagation();
+        const nextLang = isRu ? "en" : "ru";
+        try { localStorage.setItem("agy_hud_lang", nextLang); } catch (_) {}
+        window.__AGY_LANG__ = nextLang;
+        window.__AGY_RENDER__();
+      };
+    }
+
+    const collapseBtn = container.querySelector("#agy-btn-collapse");
+    if (collapseBtn) {
+      collapseBtn.onclick = (e) => {
+        e.stopPropagation();
+        try { localStorage.setItem("agy_hud_collapsed", "true"); } catch (_) {}
+        window.__AGY_RENDER__();
+      };
+    }
   };
 
   if (!window.__AGY_LISTENER_SET__) {
@@ -288,6 +431,7 @@
       } catch (_) {}
     }
 
+    // High frequency watcher for navigation
     setInterval(() => {
       const currentId = getActiveConvId();
       const currentPath = window.location.pathname;
@@ -296,7 +440,22 @@
         lastPath = currentPath;
         if (window.__AGY_RENDER__) window.__AGY_RENDER__();
       }
-    }, 100);
+    }, 150);
+
+    // Fast 1s tick for countdown timers
+    setInterval(() => {
+      if (window.__AGY_RENDER__) {
+        window.__AGY_RENDER__();
+      }
+    }, 1000);
+
+    // Hard refresh every 30 seconds: guaranteed fresh quotas without any stale cache
+    setInterval(async () => {
+      try {
+        await getQuotas(true);
+        if (window.__AGY_RENDER__) window.__AGY_RENDER__();
+      } catch (_) {}
+    }, 30000);
   }
 
   if (window.__AGY_RENDER__) {
