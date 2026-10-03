@@ -59,6 +59,14 @@
     return "Gemini 3.8 Flash";
   }
 
+  function getModelMaxContext(modelName) {
+    const m = (modelName || "").toLowerCase();
+    if (m.includes("claude")) return 200000;
+    if (m.includes("gpt") || m.includes("openai") || m.includes("o1") || m.includes("o3")) return 128000;
+    if (m.includes("pro")) return 2000000;
+    return 1000000;
+  }
+
   function fmtK(n) {
     if (!n || n <= 0) return "0";
     if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
@@ -273,11 +281,17 @@
       };
     }
 
-    const pct = (session.context_percent != null) ? session.context_percent : 0.0;
-    const barWidth = Math.min(100, Math.max(0, pct));
-    const ctxK = fmtK(session.context_size || 0);
-    const maxK = ((session.max_context || 1000000) >= 1000000) ? "1M" : fmtK(session.max_context);
     const modelName = getActiveModelName();
+    const realMax = getModelMaxContext(modelName);
+    const contextSize = (session.context_size != null) ? session.context_size : 0;
+    const pct = Math.min(100, Math.max(0, Number(((contextSize / realMax) * 100).toFixed(1))));
+    const barWidth = Math.min(100, Math.max(0, pct));
+    const ctxK = fmtK(contextSize);
+    const maxK = (realMax >= 1000000) ? ((realMax / 1000000).toFixed(0) + "M") : fmtK(realMax);
+
+    const tooltip = isRu
+      ? `Контекст модели (${modelName}):\nВсего: ${contextSize.toLocaleString()} из ${realMax.toLocaleString()} токенов (${pct}%)\n• Кэш (системный промпт и инструменты): ${(session.cached_tokens || 0).toLocaleString()}\n• Сообщения пользователя: ${(session.prompt_tokens || 0).toLocaleString()}\n• Ответы ассистента: ${(session.output_tokens || 0).toLocaleString()}`
+      : `Model Context (${modelName}):\nTotal: ${contextSize.toLocaleString()} / ${realMax.toLocaleString()} tokens (${pct}%)\n• Cached (system prompt & tools): ${(session.cached_tokens || 0).toLocaleString()}\n• User prompt: ${(session.prompt_tokens || 0).toLocaleString()}\n• Assistant output: ${(session.output_tokens || 0).toLocaleString()}`;
 
     // 2. Render COLLAPSED state
     if (isCollapsed) {
@@ -389,8 +403,8 @@
           </div>
         </div>
 
-        <!-- Middle Row: Session Context Label & High-Contrast Stats -->
-        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+        <!-- Middle Row: Session Context Label & High-Contrast Stats with detailed tooltip -->
+        <div title="${tooltip}" style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; cursor: help;">
           <span style="font-size: 11px; font-weight: 600; color: #94a3b8;">${isRu ? "Контекст сессии" : "Session Context"}</span>
           <span style="font-size: 12px; color: #34d399; font-weight: 700;">${pct.toFixed(1)}% <span style="font-weight: 500; color: #cbd5e1; font-size: 10.5px;">(${ctxK}/${maxK})</span></span>
         </div>

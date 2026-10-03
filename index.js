@@ -204,7 +204,7 @@ function collectMetricsNode(currentConvId = null) {
                           cached_tokens: cachedTokens,
                           thinking_tokens: thinkingTokens,
                           text_tokens: textTokens,
-                          context_size: cachedTokens + promptTokens
+                          context_size: cachedTokens + promptTokens + outputTokens
                         };
                         recordsForDb.push(rec);
                         allRecords.push(rec);
