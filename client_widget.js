@@ -282,14 +282,14 @@
     // 2. Render COLLAPSED state
     if (isCollapsed) {
       container.innerHTML = `
-        <div id="agy-expand-row" title="${isRu ? "Нажмите, чтобы открыть HUD" : "Click to open HUD"}" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
-          <div style="display: flex; align-items: center; gap: 7px; overflow: hidden;">
-            <span style="display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; flex-shrink: 0;"></span>
-            <span style="font-weight: 700; color: #ffffff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px;">${modelName}</span>
-            <span style="font-size: 11.5px; color: #34d399; font-weight: 700;">${pct.toFixed(1)}%</span>
+        <div id="agy-expand-row" title="${isRu ? "Нажмите, чтобы открыть HUD" : "Click to open HUD"}" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0;">
+            <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; flex-shrink: 0;"></span>
+            <span style="font-weight: 700; color: #ffffff; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px;" title="${modelName}">${modelName}</span>
+            <span style="font-size: 11.5px; color: #34d399; font-weight: 700; flex-shrink: 0;">${pct.toFixed(1)}%</span>
           </div>
           <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
-            <button type="button" id="agy-btn-expand" style="background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.26); color: #ffffff; font-size: 10.5px; font-weight: 700; padding: 2px 7px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 3px; line-height: 1.1;">
+            <button type="button" id="agy-btn-expand" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.22); color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 3px; line-height: 1.1;">
               <span>${isRu ? "Открыть" : "Open"}</span>
               <span style="font-size: 8px;">▼</span>
             </button>
@@ -372,23 +372,32 @@
     }
 
     container.innerHTML = `
-      <!-- 1. Header: Model name + Language toggle + Collapse button -->
-      <div style="margin-bottom: 8px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-          <div style="display: flex; align-items: center; gap: 4px; overflow: hidden;">
-            <span style="font-weight: 700; color: #ffffff; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px;">${modelName}</span>
+      <!-- 1. Header: Model name + Controls + Session Context Stats -->
+      <div style="margin-bottom: 9px;">
+        <!-- Top Row: Full Model Name & Control Buttons -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; min-width: 0;">
+            <span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10b981; box-shadow: 0 0 6px #10b981; flex-shrink: 0;"></span>
+            <span style="font-weight: 700; color: #ffffff; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: -0.2px;" title="${modelName}">${modelName}</span>
           </div>
-          <div style="display: flex; align-items: center; gap: 5px;">
-            <span style="font-size: 12px; color: #34d399; font-weight: 700;">${pct.toFixed(1)}% <span style="font-weight: 600; color: #e2e8f0; font-size: 11px;">(${ctxK}/${maxK})</span></span>
-            <button type="button" id="agy-lang-toggle" title="${isRu ? "Переключить язык (RU/EN)" : "Switch language (RU/EN)"}" style="background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.26); color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; cursor: pointer; line-height: 1.1;">${isRu ? "RU" : "EN"}</button>
-            <button type="button" id="agy-btn-collapse" title="${isRu ? "Скрыть полностью" : "Hide completely"}" style="background: rgba(255,255,255,0.14); border: 1px solid rgba(255,255,255,0.26); color: #ffffff; font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 3px; line-height: 1.1;">
+          <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
+            <button type="button" id="agy-lang-toggle" title="${isRu ? "Переключить язык (RU/EN)" : "Switch language (RU/EN)"}" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.22); color: #ffffff; font-size: 9.5px; font-weight: 700; padding: 2px 5px; border-radius: 4px; cursor: pointer; line-height: 1.1;">${isRu ? "RU" : "EN"}</button>
+            <button type="button" id="agy-btn-collapse" title="${isRu ? "Скрыть полностью" : "Hide completely"}" style="background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.22); color: #ffffff; font-size: 9.5px; font-weight: 700; padding: 2px 5px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 2px; line-height: 1.1;">
               <span>${hideBtnLabel}</span>
-              <span style="font-size: 8px;">▲</span>
+              <span style="font-size: 7.5px;">▲</span>
             </button>
           </div>
         </div>
+
+        <!-- Middle Row: Session Context Label & High-Contrast Stats -->
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+          <span style="font-size: 11px; font-weight: 600; color: #94a3b8;">${isRu ? "Контекст сессии" : "Session Context"}</span>
+          <span style="font-size: 12px; color: #34d399; font-weight: 700;">${pct.toFixed(1)}% <span style="font-weight: 500; color: #cbd5e1; font-size: 10.5px;">(${ctxK}/${maxK})</span></span>
+        </div>
+
+        <!-- Bottom Row: Real-time Context Bar -->
         <div style="background: rgba(255,255,255,0.14); height: 6px; border-radius: 3px; overflow: hidden;">
-          <div style="background: linear-gradient(90deg, #10b981, #34d399); width: ${barWidth}%; height: 100%; border-radius: 3px; transition: width 0.3s ease;"></div>
+          <div style="background: linear-gradient(90deg, #10b981, #34d399); width: ${barWidth}%; height: 100%; border-radius: 3px; transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);"></div>
         </div>
       </div>
 

@@ -107,7 +107,16 @@ function collectMetricsNode(currentConvId = null) {
       const fullPath = path.join(CONVERSATIONS_DIR, f);
       try {
         const stat = fs.statSync(fullPath);
-        return { path: fullPath, name: f, mtime: stat.mtimeMs };
+        let mtime = stat.mtimeMs;
+        try {
+          const walStat = fs.statSync(fullPath + "-wal");
+          if (walStat.mtimeMs > mtime) mtime = walStat.mtimeMs;
+        } catch (_) {}
+        try {
+          const shmStat = fs.statSync(fullPath + "-shm");
+          if (shmStat.mtimeMs > mtime) mtime = shmStat.mtimeMs;
+        } catch (_) {}
+        return { path: fullPath, name: f, mtime };
       } catch (_) {
         return null;
       }
@@ -499,5 +508,5 @@ if (fs.existsSync(CONVERSATIONS_DIR)) {
 }
 
 console.log("[Antigravity Tokens HUD] High-speed daemon running. Monitoring Antigravity DevTools...");
-setInterval(updateLoop, 500);
+setInterval(updateLoop, 250);
 updateLoop();
