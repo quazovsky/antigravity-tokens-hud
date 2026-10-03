@@ -118,7 +118,7 @@
       if (!client) return null;
       const res = await Promise.race([
         client.retrieveUserQuotaSummary({}),
-        new Promise(r => setTimeout(() => r(null), 1500))
+        new Promise(r => setTimeout(() => r(null), 6000))
       ]);
       return res?.response?.groups || null;
     } catch (e) {
@@ -126,24 +126,23 @@
     }
   }
 
-  let cachedQuotas = null;
-  let lastQuotaFetch = 0;
-  let isFetchingQuotas = false;
-
   async function getQuotas(force = false) {
     const now = Date.now();
-    // 30 seconds refresh cycle
-    if (force || !cachedQuotas || (now - lastQuotaFetch >= 30000 && !isFetchingQuotas)) {
-      isFetchingQuotas = true;
-      lastQuotaFetch = now;
+    window.__AGY_QUOTA_CACHE__ = window.__AGY_QUOTA_CACHE__ || null;
+    window.__AGY_LAST_FETCH__ = window.__AGY_LAST_FETCH__ || 0;
+
+    // Refresh every 10 seconds or when forced
+    if (force || !window.__AGY_QUOTA_CACHE__ || (now - window.__AGY_LAST_FETCH__ >= 10000 && !window.__AGY_IS_FETCHING__)) {
+      window.__AGY_IS_FETCHING__ = true;
+      window.__AGY_LAST_FETCH__ = now;
       try {
         const q = await fetchOfficialQuotas();
-        if (q && q.length > 0) cachedQuotas = q;
+        if (q && q.length > 0) window.__AGY_QUOTA_CACHE__ = q;
       } finally {
-        isFetchingQuotas = false;
+        window.__AGY_IS_FETCHING__ = false;
       }
     }
-    return cachedQuotas;
+    return window.__AGY_QUOTA_CACHE__;
   }
 
   function parseQuotaGroups(groups, isRu) {
@@ -160,14 +159,18 @@
       const hBucket = g.buckets?.find(b => b.window === "5h" || b.bucketId?.includes("5h"));
       const wBucket = g.buckets?.find(b => b.window === "weekly" || b.bucketId?.includes("weekly"));
 
-      const hVal = hBucket?.remaining?.value != null ? hBucket.remaining.value : 1.0;
-      const wVal = wBucket?.remaining?.value != null ? wBucket.remaining.value : 1.0;
+      // If bucket is disabled or remaining is 0, it is 0%!
+      const hDisabled = Boolean(hBucket?.disabled);
+      const wDisabled = Boolean(wBucket?.disabled);
+
+      const hVal = hDisabled ? 0 : (hBucket?.remaining?.value != null ? hBucket.remaining.value : 0);
+      const wVal = wDisabled ? 0 : (wBucket?.remaining?.value != null ? wBucket.remaining.value : 0);
 
       const hPct = Math.round(hVal * 100);
       const wPct = Math.round(wVal * 100);
 
-      const hResetSec = hBucket?.resetTime?.seconds;
-      const wResetSec = wBucket?.resetTime?.seconds;
+      const hResetSec = hBucket?.resetTime?.seconds ? Number(hBucket.resetTime.seconds) : null;
+      const wResetSec = wBucket?.resetTime?.seconds ? Number(wBucket.resetTime.seconds) : null;
 
       const hResetStr = formatResetTime(hResetSec, isRu);
       const wResetStr = formatResetTime(wResetSec, isRu);
@@ -472,13 +475,13 @@
       }
     }, 1000);
 
-    // Hard refresh every 30 seconds: guaranteed fresh quotas without any stale cache
+    // Hard refresh every 10 seconds: guaranteed fresh quotas without any stale cache
     setInterval(async () => {
       try {
         await getQuotas(true);
         if (window.__AGY_RENDER__) window.__AGY_RENDER__();
       } catch (_) {}
-    }, 30000);
+    }, 10000);
   }
 
   if (window.__AGY_RENDER__) {

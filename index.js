@@ -195,6 +195,12 @@ function collectMetricsNode(currentConvId = null) {
                         const cachedTokens = d[5] || 0;
                         const thinkingTokens = d[9] || 0;
                         const textTokens = d[10] || 0;
+
+                        // Filter out non-token telemetry records (e.g. durations in nanoseconds > 2M)
+                        if (promptTokens > 2000000 || cachedTokens > 2000000 || outputTokens > 1000000) {
+                          continue;
+                        }
+
                         const rec = {
                           session_id: sessId,
                           idx: row.idx,
@@ -475,12 +481,20 @@ async function updateLoop() {
     for (const [id, entry] of activePages) {
       if (entry.ws.readyState !== WebSocket.OPEN) continue;
 
-      let evalCode = `
-        window.__AGY_DATA__ = ${payload};
-        window.__AGY_LANG__ = ${JSON.stringify(lang)};
-        ${clientScript}
-      `;
-      entry.injected = true;
+      let evalCode = "";
+      if (!entry.injected) {
+        entry.injected = true;
+        evalCode = `
+          window.__AGY_DATA__ = ${payload};
+          window.__AGY_LANG__ = ${JSON.stringify(lang)};
+          ${clientScript}
+        `;
+      } else {
+        evalCode = `
+          window.__AGY_DATA__ = ${payload};
+          if (window.__AGY_RENDER__) window.__AGY_RENDER__();
+        `;
+      }
 
       entry.ws.send(JSON.stringify({
         id: nextCdpId(),
