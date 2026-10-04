@@ -171,26 +171,38 @@ foreach ($scPath in $shortcutsToHook) {
     }
 }
 
-# 7. Настройка Планировщика задач Windows и Автозагрузки
-Write-Host "⚙️ Настройка фоновой службы..." -ForegroundColor Yellow
+# 7. Настройка автозапуска Windows (реестр Run + папка Автозагрузка + Планировщик)
+Write-Host "⚙️ Настройка гарантированного автозапуска..." -ForegroundColor Yellow
+
+# Реестр HKCU Run (запуск при входе пользователя без прав администратора)
+try {
+    $regRunCmd = "wscript.exe `"$InstallDir\run-hud.vbs`""
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AntigravityTokensHUD" -Value $regRunCmd -Force -ErrorAction SilentlyContinue
+    Write-Host "✅ Автозапуск в реестре Windows (Run) настроен." -ForegroundColor Green
+} catch {}
+
+# Папка Автозагрузки Windows (Startup)
+try {
+    $startupFolder = [Environment]::GetFolderPath("Startup")
+    Remove-Item "$startupFolder\antigravity-tokens-hud.vbs" -Force -ErrorAction SilentlyContinue
+    $startupLnk = "$startupFolder\antigravity-tokens-hud.lnk"
+    $scStart = $wsh.CreateShortcut($startupLnk)
+    $scStart.TargetPath = "wscript.exe"
+    $scStart.Arguments = "`"$InstallDir\run-hud.vbs`""
+    $scStart.WorkingDirectory = $InstallDir
+    $scStart.Description = "Antigravity Tokens HUD Background Daemon"
+    $scStart.Save()
+    Write-Host "✅ Ярлык автозагрузки в папке Startup создан." -ForegroundColor Green
+} catch {}
+
+# Планировщик задач (если доступны разрешения)
 try {
     $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$InstallDir\run-hud.vbs`"" -WorkingDirectory $InstallDir
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Days 365) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
     Register-ScheduledTask -TaskName "AntigravityTokensHUD" -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction SilentlyContinue | Out-Null
     Start-ScheduledTask -TaskName "AntigravityTokensHUD" -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "✅ Задача в Планировщике Windows создана и запущена." -ForegroundColor Green
 } catch {}
-
-$startupFolder = [Environment]::GetFolderPath("Startup")
-$startupLnk = "$startupFolder\antigravity-tokens-hud.lnk"
-$scStart = $wsh.CreateShortcut($startupLnk)
-$scStart.TargetPath = "wscript.exe"
-$scStart.Arguments = "`"$InstallDir\run-hud.vbs`""
-$scStart.WorkingDirectory = $InstallDir
-$scStart.Description = "Antigravity Tokens HUD Background Daemon"
-$scStart.Save()
-Write-Host "✅ Ярлык автозагрузки создан." -ForegroundColor Green
 
 # 8. Запуск фоновой службы прямо сейчас
 Start-Process -FilePath "wscript.exe" -ArgumentList "`"$InstallDir\run-hud.vbs`""

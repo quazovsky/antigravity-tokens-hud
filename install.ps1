@@ -170,26 +170,38 @@ foreach ($scPath in $shortcutsToHook) {
     }
 }
 
-# 7. Configure Task Scheduler & Windows Startup
+# 7. Configure Windows Autostart (Registry Run key + Startup folder + Task Scheduler)
 Write-Host "⚙️ Configuring background persistence..." -ForegroundColor Yellow
+
+# Registry Run Key (Guaranteed user-level autostart on Windows logon)
+try {
+    $regRunCmd = "wscript.exe `"$InstallDir\run-hud.vbs`""
+    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AntigravityTokensHUD" -Value $regRunCmd -Force -ErrorAction SilentlyContinue
+    Write-Host "✅ Registry Run key autostart configured." -ForegroundColor Green
+} catch {}
+
+# Windows Startup folder
+try {
+    $startupFolder = [Environment]::GetFolderPath("Startup")
+    Remove-Item "$startupFolder\antigravity-tokens-hud.vbs" -Force -ErrorAction SilentlyContinue
+    $startupLnk = "$startupFolder\antigravity-tokens-hud.lnk"
+    $scStart = $wsh.CreateShortcut($startupLnk)
+    $scStart.TargetPath = "wscript.exe"
+    $scStart.Arguments = "`"$InstallDir\run-hud.vbs`""
+    $scStart.WorkingDirectory = $InstallDir
+    $scStart.Description = "Antigravity Tokens HUD Background Daemon"
+    $scStart.Save()
+    Write-Host "✅ Startup folder shortcut created." -ForegroundColor Green
+} catch {}
+
+# Scheduled Task (if permissions allow)
 try {
     $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$InstallDir\run-hud.vbs`"" -WorkingDirectory $InstallDir
     $trigger = New-ScheduledTaskTrigger -AtLogOn
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Days 365) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
     Register-ScheduledTask -TaskName "AntigravityTokensHUD" -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction SilentlyContinue | Out-Null
     Start-ScheduledTask -TaskName "AntigravityTokensHUD" -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "✅ Windows Scheduled Task created and started." -ForegroundColor Green
 } catch {}
-
-$startupFolder = [Environment]::GetFolderPath("Startup")
-$startupLnk = "$startupFolder\antigravity-tokens-hud.lnk"
-$scStart = $wsh.CreateShortcut($startupLnk)
-$scStart.TargetPath = "wscript.exe"
-$scStart.Arguments = "`"$InstallDir\run-hud.vbs`""
-$scStart.WorkingDirectory = $InstallDir
-$scStart.Description = "Antigravity Tokens HUD Background Daemon"
-$scStart.Save()
-Write-Host "✅ Startup shortcut created." -ForegroundColor Green
 
 # 8. Start background HUD daemon now
 Start-Process -FilePath "wscript.exe" -ArgumentList "`"$InstallDir\run-hud.vbs`""

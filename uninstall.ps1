@@ -27,9 +27,10 @@ foreach ($scPath in $shortcutsToRestore) {
     }
 }
 
-# 2. Remove Task Scheduler task
+# 2. Remove Task Scheduler task & Registry Run key
 Unregister-ScheduledTask -TaskName "AntigravityTokensHUD" -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-Write-Host "✅ Removed Scheduled Task." -ForegroundColor Green
+Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AntigravityTokensHUD" -Force -ErrorAction SilentlyContinue
+Write-Host "✅ Removed Scheduled Task and Registry Run key." -ForegroundColor Green
 
 # 3. Remove Startup shortcuts
 $startupFolder = [Environment]::GetFolderPath("Startup")

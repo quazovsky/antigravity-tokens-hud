@@ -10,6 +10,13 @@ const net = require("net");
 // Suppress experimental sqlite warning
 process.removeAllListeners("warning");
 
+process.on("uncaughtException", (err) => {
+  // Prevent crash from transient CDP or network error
+});
+process.on("unhandledRejection", (reason) => {
+  // Prevent crash from unhandled promise rejection
+});
+
 // Single-instance lock
 const singleInstanceServer = net.createServer();
 singleInstanceServer.once("error", (err) => {
@@ -496,14 +503,19 @@ async function updateLoop() {
         `;
       }
 
-      entry.ws.send(JSON.stringify({
-        id: nextCdpId(),
-        method: "Runtime.evaluate",
-        params: {
-          expression: evalCode,
-          returnByValue: false
-        }
-      }));
+      try {
+        entry.ws.send(JSON.stringify({
+          id: nextCdpId(),
+          method: "Runtime.evaluate",
+          params: {
+            expression: evalCode,
+            returnByValue: false
+          }
+        }));
+      } catch (_) {
+        try { entry.ws.close(); } catch (__) {}
+        activePages.delete(id);
+      }
     }
   } catch (_) {
     // Non-fatal, retry next tick
