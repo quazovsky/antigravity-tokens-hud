@@ -180,18 +180,12 @@ try {
     Write-Host "✅ Registry Run key autostart configured." -ForegroundColor Green
 } catch {}
 
-# Windows Startup folder
+# Clean any legacy Startup folder shortcuts to avoid duplicate entries in Task Manager
 try {
     $startupFolder = [Environment]::GetFolderPath("Startup")
     Remove-Item "$startupFolder\antigravity-tokens-hud.vbs" -Force -ErrorAction SilentlyContinue
-    $startupLnk = "$startupFolder\antigravity-tokens-hud.lnk"
-    $scStart = $wsh.CreateShortcut($startupLnk)
-    $scStart.TargetPath = "wscript.exe"
-    $scStart.Arguments = "`"$InstallDir\run-hud.vbs`""
-    $scStart.WorkingDirectory = $InstallDir
-    $scStart.Description = "Antigravity Tokens HUD Background Daemon"
-    $scStart.Save()
-    Write-Host "✅ Startup folder shortcut created." -ForegroundColor Green
+    Remove-Item "$startupFolder\antigravity-tokens-hud.lnk" -Force -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder" -Name "antigravity-tokens-hud.lnk" -Force -ErrorAction SilentlyContinue
 } catch {}
 
 # Scheduled Task (if permissions allow)

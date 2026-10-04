@@ -181,18 +181,12 @@ try {
     Write-Host "✅ Автозапуск в реестре Windows (Run) настроен." -ForegroundColor Green
 } catch {}
 
-# Папка Автозагрузки Windows (Startup)
+# Удаление устаревших ярлыков из папки Startup во избежание дублирования в диспетчере задач
 try {
     $startupFolder = [Environment]::GetFolderPath("Startup")
     Remove-Item "$startupFolder\antigravity-tokens-hud.vbs" -Force -ErrorAction SilentlyContinue
-    $startupLnk = "$startupFolder\antigravity-tokens-hud.lnk"
-    $scStart = $wsh.CreateShortcut($startupLnk)
-    $scStart.TargetPath = "wscript.exe"
-    $scStart.Arguments = "`"$InstallDir\run-hud.vbs`""
-    $scStart.WorkingDirectory = $InstallDir
-    $scStart.Description = "Antigravity Tokens HUD Background Daemon"
-    $scStart.Save()
-    Write-Host "✅ Ярлык автозагрузки в папке Startup создан." -ForegroundColor Green
+    Remove-Item "$startupFolder\antigravity-tokens-hud.lnk" -Force -ErrorAction SilentlyContinue
+    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupFolder" -Name "antigravity-tokens-hud.lnk" -Force -ErrorAction SilentlyContinue
 } catch {}
 
 # Планировщик задач (если доступны разрешения)
