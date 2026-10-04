@@ -173,11 +173,76 @@ foreach ($scPath in $shortcutsToHook) {
 # 7. Configure Windows Autostart (Registry Run key + Startup folder + Task Scheduler)
 Write-Host "⚙️ Configuring background persistence..." -ForegroundColor Yellow
 
-# Registry Run Key (Guaranteed user-level autostart on Windows logon)
+# Compile lightweight launcher executable with official Antigravity icon & metadata
+$csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+$icoPath = "$InstallDir\antigravity.ico"
+$launcherExe = "$InstallDir\AntigravityHUD.exe"
+
+if (-not (Test-Path $icoPath) -and (Test-Path $antigravityExe)) {
+    try {
+        Add-Type -AssemblyName System.Drawing
+        $ico = [System.Drawing.Icon]::ExtractAssociatedIcon($antigravityExe)
+        $fs = New-Object System.IO.FileStream($icoPath, [System.IO.FileMode]::Create)
+        $ico.Save($fs)
+        $fs.Close()
+    } catch {}
+}
+
+if ((Test-Path $csc) -and (Test-Path $icoPath)) {
+    $csSource = @"
+using System;
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
+
+[assembly: AssemblyTitle("Antigravity Tokens HUD")]
+[assembly: AssemblyDescription("Google Antigravity Tokens HUD Background Service")]
+[assembly: AssemblyCompany("Google Antigravity")]
+[assembly: AssemblyProduct("Antigravity")]
+[assembly: AssemblyCopyright("Copyright © 2026")]
+
+namespace AntigravityHUD
+{
+    static class Program
+    {
+        [STAThread]
+        static void Main()
+        {
+            try
+            {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
+                string vbs = Path.Combine(baseDir, "run-hud.vbs");
+                var psi = new ProcessStartInfo
+                {
+                    FileName = "wscript.exe",
+                    Arguments = "\"" + vbs + "\"",
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WindowStyle = ProcessWindowStyle.Hidden,
+                    WorkingDirectory = baseDir
+                };
+                Process.Start(psi);
+            }
+            catch { }
+        }
+    }
+}
+"@
+    $csFile = "$InstallDir\Launcher.cs"
+    [System.IO.File]::WriteAllText($csFile, $csSource, [System.Text.Encoding]::UTF8)
+    & $csc /target:winexe /optimize /win32icon:"$icoPath" /out:"$launcherExe" "$csFile" 2>$null | Out-Null
+    Remove-Item $csFile -Force -ErrorAction SilentlyContinue
+}
+
+# Registry Run Key (Guaranteed user-level autostart with Antigravity icon)
 try {
-    $regRunCmd = "wscript.exe `"$InstallDir\run-hud.vbs`""
+    if (Test-Path $launcherExe) {
+        $regRunCmd = "`"$launcherExe`""
+    } else {
+        $regRunCmd = "wscript.exe `"$InstallDir\run-hud.vbs`""
+    }
     Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "AntigravityTokensHUD" -Value $regRunCmd -Force -ErrorAction SilentlyContinue
-    Write-Host "✅ Registry Run key autostart configured." -ForegroundColor Green
+    Write-Host "✅ Registry Run key autostart configured (with Antigravity icon)." -ForegroundColor Green
 } catch {}
 
 # Clean any legacy Startup folder shortcuts to avoid duplicate entries in Task Manager
