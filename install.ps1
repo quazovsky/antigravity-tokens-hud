@@ -130,6 +130,15 @@ foreach ($f in $files) {
     }
 }
 
+# Copy / download high quality icon
+if (Test-Path "$PSScriptRoot\assets\antigravity.ico") {
+    Copy-Item "$PSScriptRoot\assets\antigravity.ico" "$InstallDir\antigravity.ico" -Force
+} else {
+    try {
+        Invoke-WebRequest -Uri "$RepoRawUrl/assets/antigravity.ico" -OutFile "$InstallDir\antigravity.ico" -UseBasicParsing -ErrorAction SilentlyContinue
+    } catch {}
+}
+
 # Set English config
 Set-Content -Path "$InstallDir\config.json" -Value '{"lang":"en"}'
 

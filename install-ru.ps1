@@ -131,6 +131,15 @@ foreach ($f in $files) {
     }
 }
 
+# Копирование / загрузка официальной иконки высокого качества
+if (Test-Path "$PSScriptRoot\assets\antigravity.ico") {
+    Copy-Item "$PSScriptRoot\assets\antigravity.ico" "$InstallDir\antigravity.ico" -Force
+} else {
+    try {
+        Invoke-WebRequest -Uri "$RepoRawUrl/assets/antigravity.ico" -OutFile "$InstallDir\antigravity.ico" -UseBasicParsing -ErrorAction SilentlyContinue
+    } catch {}
+}
+
 # Установка русского языка по умолчанию
 Set-Content -Path "$InstallDir\config.json" -Value '{"lang":"ru"}'
 
